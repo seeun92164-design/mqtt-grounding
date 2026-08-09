@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>grounding MQTT Dashboard</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --border: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --online: #22c55e;
+    --offline: #ef4444;
+    --accent: #3b82f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  #status { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  #status.ok { color: var(--online); }
+  #status.err { color: var(--offline); }
+  #grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .name { font-weight: 600; font-size: 16px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  .dot.online { background: var(--online); }
+  .dot.offline { background: var(--offline); }
+  .sensor { font-size: 13px; color: var(--muted); margin-bottom: 12px; }
+  .sensor b { color: var(--text); }
+  .btns { display: flex; gap: 8px; }
+  button {
+    flex: 1;
+    padding: 8px 0;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #0b1220;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  button.on-active { background: var(--online); border-color: var(--online); color: #06210f; }
+  button.off-active { background: var(--offline); border-color: var(--offline); color: #2a0a0a; }
+  #empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+  <h1>grounding Dashboard</h1>
+  <div id="status">connecting...</div>
+  <div id="grid"></div>
+  <p id="empty">아직 보고된 보드가 없습니다. 보드 전원을 켜고 잠시 기다려 보세요.</p>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const host = params.get("host") || "192.168.0.35"; // 브로커 호스트 IP가 바뀌면 ?host=<ip> 로 접속
+  const port = params.get("port") || "9001";
+  const prefix = params.get("prefix") || "grounding";
+  const url = `ws://${host}:${port}`;
+
+  const statusEl = document.getElementById("status");
+  const gridEl = document.getElementById("grid");
+  const emptyEl = document.getElementById("empty");
+
+  const devices = {}; // id -> { status, raw, mv, led }
+
+  const client = mqtt.connect(url, { reconnectPeriod: 2000 });
+
+  client.on("connect", () => {
+    statusEl.textContent = `connected to ${url} (${prefix}/)`;
+    statusEl.className = "ok";
+    client.subscribe(`${prefix}/+/status`);
+    client.subscribe(`${prefix}/+/sensor/a0`);
+    client.subscribe(`${prefix}/+/led/state`);
+  });
+
+  client.on("reconnect", () => {
+    statusEl.textContent = `reconnecting to ${url} ...`;
+    statusEl.className = "";
+  });
+
+  client.on("error", (err) => {
+    statusEl.textContent = `connection error: ${err.message}`;
+    statusEl.className = "err";
+  });
+
+  client.on("message", (topic, payloadBuf) => {
+    const parts = topic.split("/"); // grounding / <id> / ...
+    const id = parts[1];
+    const leaf = parts.slice(2).join("/");
+    const payload = payloadBuf.toString();
+
+    if (!devices[id]) devices[id] = { status: "unknown", raw: null, mv: null, led: "off" };
+
+    if (leaf === "status") {
+      devices[id].status = payload;
+    } else if (leaf === "sensor/a0") {
+      try {
+        const j = JSON.parse(payload);
+        devices[id].raw = j.raw;
+        devices[id].mv = j.mv;
+      } catch (e) { /* ignore malformed payload */ }
+    } else if (leaf === "led/state") {
+      devices[id].led = payload;
+    }
+
+    render();
+  });
+
+  function setLed(id, state) {
+    client.publish(`${prefix}/${id}/led/set`, state);
+  }
+
+  function render() {
+    const ids = Object.keys(devices).sort();
+    emptyEl.style.display = ids.length ? "none" : "block";
+    gridEl.innerHTML = ids.map((id) => {
+      const d = devices[id];
+      const online = d.status === "online";
+      const sensorText = (d.raw !== null)
+        ? `raw <b>${d.raw}</b> &middot; ${(d.mv / 1000).toFixed(3)} V`
+        : "no sensor data yet";
+      return `
+        <div class="card">
+          <div class="card-head">
+            <span class="name">${id}</span>
+            <span class="dot ${online ? "online" : "offline"}" title="${d.status}"></span>
+          </div>
+          <div class="sensor">${sensorText}</div>
+          <div class="btns">
+            <button class="${d.led === "on" ? "on-active" : ""}" onclick="setLed('${id}','on')">ON</button>
+            <button class="${d.led === "off" ? "off-active" : ""}" onclick="setLed('${id}','off')">OFF</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+</script>
+</body>
+</html>
