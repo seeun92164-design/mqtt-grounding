@@ -1,0 +1,18 @@
+{
+  "name": "mqtt-grounding",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Installer for team grounding's MQTT classroom skill (broker, CLI, dashboard, board firmware)",
+  "bin": {
+    "install-mqtt-grounding": "bin/install.js"
+  },
+  "files": [
+    "bin",
+    "SKILL.md",
+    "skill.sh",
+    "broker",
+    "web",
+    "board",
+    ".gitignore"
+  ]
+}

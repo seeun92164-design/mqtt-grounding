@@ -8,6 +8,19 @@ else's way (and vice versa).
 This wraps the `mosquitto_pub` / `mosquitto_sub` commands behind `skill.sh`,
 same interface as the classroom skill, just pointed at our own broker.
 
+## Install (teammates)
+
+From the project you want the skill in:
+
+```bash
+npx github:seeun92164-design/mqtt-grounding
+```
+
+This drops everything into `.claude/skills/mqtt-grounding/` in the current
+directory (pass a path as an argument to install somewhere else). Needs
+Node.js; the mosquitto CLI clients are still required separately (see
+Prerequisites below).
+
 ## Broker
 
 | | |
