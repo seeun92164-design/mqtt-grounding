@@ -178,6 +178,31 @@ client.publish('grounding/seeun/led/set', 'on')
 A browser cannot open a raw MQTT TCP socket, so port 1883 will not work from
 a web page — that is what the 9001 listener exists for.
 
+## Mesh chain demo (A -> B -> C -> D)
+
+`MeshChain/` is a separate demo, unrelated to the MQTT broker above except for
+one bridge point: four boards form their own painlessMesh network (SSID
+`groundingMesh`, independent of this broker/WiFi) and relay a typed message
+A -> B -> C -> D. It tolerates 1-2 missing boards by skipping dead roles
+(role presence is tracked via a heartbeat, timeout 5s) and self-heals when a
+board comes back online.
+
+- All 4 boards flash the same `MeshChain/MeshChain.ino`, changing only
+  `#define MY_ROLE` to `'A'`, `'B'`, `'C'`, or `'D'`.
+- Libraries needed by everyone: `Painless Mesh` (pulls in `ArduinoJson` and
+  `TaskScheduler`) and `Async TCP` (the ESP32Async fork — not the older
+  `AsyncTCP` by dvarrel, which is a different, less-maintained library with
+  the same include name).
+- Whoever flashes role `D` additionally needs `PubSubClient`, and must copy
+  `MeshChain/mesh_secrets.h.example` to `MeshChain/mesh_secrets.h` and fill in
+  the WiFi/broker values. D bridges the mesh to this project's `grounding`
+  MQTT broker (publishing to `grounding/mesh/...`) so the mesh has a browser
+  dashboard; if D is offline, A/B/C keep relaying to each other but the
+  dashboard stops updating.
+- Dashboard: open `MeshChain/mesh-dashboard.html` directly in a browser (no
+  server needed), same `?host=`/`?port=` override pattern as the main
+  dashboard.
+
 ## Troubleshooting
 
 | Symptom | Cause |

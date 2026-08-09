@@ -1,1 +1,2 @@
 board/*/arduino_secrets.h
+MeshChain/mesh_secrets.h

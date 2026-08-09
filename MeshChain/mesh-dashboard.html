@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Mesh Chain Dashboard</title>
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; background: #111; color: #eee; margin: 0; padding: 24px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 24px; }
+  .chain { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; flex-wrap: wrap; }
+  .node { border: 2px solid #333; border-radius: 12px; padding: 16px 20px; min-width: 90px; text-align: center; background: #1a1a1a; transition: all .2s; }
+  .node .role { font-size: 28px; font-weight: bold; }
+  .node .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-top: 8px; background: #555; }
+  .node.online { border-color: #2ecc71; }
+  .node.online .dot { background: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+  .node.offline .dot { background: #e74c3c; }
+  .arrow { font-size: 20px; color: #555; }
+  .arrow.active { color: #2ecc71; }
+  .panel { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 16px; margin-bottom: 24px; }
+  .panel h2 { font-size: 14px; color: #999; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .05em; }
+  #final { font-size: 16px; }
+  #final .path { color: #2ecc71; font-weight: bold; }
+  #log { max-height: 320px; overflow-y: auto; font-family: ui-monospace, monospace; font-size: 13px; }
+  #log div { padding: 4px 0; border-bottom: 1px solid #262626; color: #ccc; }
+  #log div .t { color: #666; margin-right: 8px; }
+  #status { font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+
+<h1>Mesh Chain Dashboard</h1>
+<div class="sub" id="status">연결 중...</div>
+
+<div class="chain" id="chain"></div>
+
+<div class="panel">
+  <h2>마지막 도착</h2>
+  <div id="final">아직 없음</div>
+</div>
+
+<div class="panel">
+  <h2>실시간 릴레이 로그</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+const params = new URLSearchParams(location.search);
+const host = params.get('host') || '192.168.0.35';
+const port = params.get('port') || '9001';
+const prefix = params.get('prefix') || 'grounding/mesh';
+
+const ROLES = ['A', 'B', 'C', 'D'];
+const chainEl = document.getElementById('chain');
+const statusEl = document.getElementById('status');
+const finalEl = document.getElementById('final');
+const logEl = document.getElementById('log');
+
+ROLES.forEach((role, i) => {
+  const node = document.createElement('div');
+  node.className = 'node offline';
+  node.id = 'node-' + role;
+  node.innerHTML = `<div class="role">${role}</div><div class="dot"></div>`;
+  chainEl.appendChild(node);
+  if (i < ROLES.length - 1) {
+    const arrow = document.createElement('div');
+    arrow.className = 'arrow';
+    arrow.id = 'arrow-' + role;
+    arrow.textContent = '→';
+    chainEl.appendChild(arrow);
+  }
+});
+
+function flashArrow(role) {
+  const arrow = document.getElementById('arrow-' + role);
+  if (!arrow) return;
+  arrow.classList.add('active');
+  setTimeout(() => arrow.classList.remove('active'), 600);
+}
+
+function setOnline(role, online) {
+  const node = document.getElementById('node-' + role);
+  if (!node) return;
+  node.classList.toggle('online', online);
+  node.classList.toggle('offline', !online);
+}
+
+function logLine(text) {
+  const div = document.createElement('div');
+  const time = new Date().toLocaleTimeString();
+  div.innerHTML = `<span class="t">${time}</span>${text}`;
+  logEl.prepend(div);
+  while (logEl.children.length > 100) logEl.removeChild(logEl.lastChild);
+}
+
+const client = mqtt.connect(`ws://${host}:${port}`);
+
+client.on('connect', () => {
+  statusEl.textContent = `연결됨: ${host}:${port} (${prefix})`;
+  client.subscribe(prefix + '/+/status');
+  client.subscribe(prefix + '/hop');
+  client.subscribe(prefix + '/final');
+});
+
+client.on('reconnect', () => { statusEl.textContent = '재연결 중...'; });
+client.on('error', (e) => { statusEl.textContent = '연결 오류: ' + e.message; });
+
+client.on('message', (topic, payloadBuf) => {
+  const payload = payloadBuf.toString();
+  const rest = topic.slice(prefix.length + 1);
+
+  if (rest.endsWith('/status')) {
+    const role = rest.split('/')[0];
+    setOnline(role, payload === 'online');
+    logLine(`<b>${role}</b> ${payload === 'online' ? '온라인' : '오프라인'}`);
+    return;
+  }
+
+  if (rest === 'hop') {
+    try {
+      const { path, to, msg } = JSON.parse(payload);
+      logLine(`${path} → <b>${to}</b> : "${msg}"`);
+      flashArrow(path.slice(-1));
+    } catch (e) {}
+    return;
+  }
+
+  if (rest === 'final') {
+    try {
+      const { path, msg } = JSON.parse(payload);
+      finalEl.innerHTML = `경로 <span class="path">${path}</span> : "${msg}"`;
+      logLine(`<b>도착</b> ${path} : "${msg}"`);
+    } catch (e) {}
+    return;
+  }
+});
+</script>
+
+</body>
+</html>
