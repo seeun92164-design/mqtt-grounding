@@ -13,7 +13,6 @@
     "broker",
     "web",
     "board",
-    "MeshChain",
     ".gitignore"
   ]
 }

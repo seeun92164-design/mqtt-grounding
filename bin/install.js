@@ -12,7 +12,7 @@ const targetDir = path.join(targetBase, ".claude", "skills", "mqtt-grounding");
 
 // npm strips dotfiles like .gitignore out of packed/cloned installs, so it
 // is written directly here instead of being copied from the repo.
-const ITEMS = ["SKILL.md", "skill.sh", "broker", "web", "board", "MeshChain"];
+const ITEMS = ["SKILL.md", "skill.sh", "broker", "web", "board"];
 
 fs.mkdirSync(targetDir, { recursive: true });
 
@@ -25,7 +25,7 @@ for (const item of ITEMS) {
 
 fs.writeFileSync(
   path.join(targetDir, ".gitignore"),
-  "board/*/arduino_secrets.h\nMeshChain/mesh_secrets.h\n"
+  "board/*/arduino_secrets.h\n"
 );
 
 const skillShPath = path.join(targetDir, "skill.sh");
